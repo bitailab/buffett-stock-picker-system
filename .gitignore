@@ -1,0 +1,5 @@
+config.yaml
+data/*.db
+reports/*.html
+__pycache__/
+*.pyc

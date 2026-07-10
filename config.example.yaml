@@ -1,0 +1,59 @@
+# ============================================================
+# 巴菲特策略美股定投系统 - 配置文件
+# ============================================================
+
+# 数据源：yfinance（免费、覆盖全部美股、无每日配额，推荐）
+#        fmp（免费档只开放少数股票且限 250 次/天；升级付费档后可切换回来）
+data_source: yfinance
+
+fmp:
+  # 到 https://site.financialmodelingprep.com 注册后填入你的 API key
+  api_key: "YOUR_FMP_API_KEY"
+  # free = 免费档（每天250次请求，自动断点续扫）; starter = 付费档（放开限速）
+  plan: free
+  # 免费档每日调用上限（留一点余量，官方限额 250）
+  daily_call_budget: 240
+
+investment:
+  # 每月定投金额（新币）
+  monthly_budget_sgd: 5000
+  # 每月最多买入几只股票（巴菲特风格：集中投资）
+  max_buys_per_month: 3
+  # 单只股票占组合市值上限，超过则本月跳过该股票
+  max_position_pct: 25
+
+# ------------------------------------------------------------
+# 巴菲特质量筛选阈值（第一层：好生意）
+# ------------------------------------------------------------
+quality:
+  min_years: 5              # 最少需要几年财报数据才参与评分
+  roe_avg_min: 15           # 平均 ROE ≥ 15%
+  roe_floor: 10             # 任何一年 ROE 不得低于 10%
+  gross_margin_min: 40      # 毛利率 ≥ 40%（护城河代理）
+  net_margin_min: 10        # 净利率 ≥ 10%
+  eps_cagr_min: 5           # EPS 年复合增长 ≥ 5%
+  max_debt_to_ebitda: 3     # 总债务/EBITDA < 3
+  max_debt_to_equity: 0.8   # 或 D/E < 0.8（两者满足其一即可）
+  min_interest_coverage: 5  # EBIT/利息支出 > 5
+  fcf_conversion_min: 80    # FCF/净利润 平均 ≥ 80%
+
+# ------------------------------------------------------------
+# 估值参数（第二层：好价格）
+# ------------------------------------------------------------
+valuation:
+  discount_rate: 0.09       # 折现率 9%
+  terminal_growth: 0.025    # 终值增长率 2.5%
+  max_growth_rate: 0.10     # 增长率上限 10%（保守）
+  projection_years: 10      # DCF 预测年数
+  margin_of_safety_min: 25  # 安全边际 ≥ 25% 才进入可买入名单
+
+# ------------------------------------------------------------
+# 综合评分权重（第三层）
+# ------------------------------------------------------------
+scoring:
+  quality_weight: 0.7       # 质量分权重
+  valuation_weight: 0.3     # 估值分权重
+
+paths:
+  db: data/market_scan.db
+  reports_dir: reports

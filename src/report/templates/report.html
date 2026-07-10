@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>巴菲特定投月报 · {{ month }}</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --ink: #1f2823; --muted: #6b7570;
+    --line: #e3e1da; --green: #1a7a4a; --green-bg: #e8f3ec;
+    --red: #b03a2e; --red-bg: #f9ece9; --amber: #8a6d1a; --amber-bg: #f7f0dd;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6; padding: 40px 20px; max-width: 1000px; margin: 0 auto;
+  }
+  h1 { font-size: 26px; margin-bottom: 4px; }
+  h2 { font-size: 18px; margin: 36px 0 12px; border-bottom: 2px solid var(--line); padding-bottom: 8px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 2px solid var(--line); white-space: nowrap; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  th.num { text-align: right; }
+  .tablewrap { overflow-x: auto; }
+  .pill { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pass { color: var(--green); background: var(--green-bg); }
+  .fail { color: var(--red); background: var(--red-bg); }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .hold-cash { background: var(--amber-bg); border: 1px solid #e3d9b8; border-radius: 10px; padding: 20px 24px; color: var(--amber); font-size: 15px; }
+  .buy-line { font-size: 15px; margin-bottom: 8px; }
+  .buy-line b { font-size: 17px; }
+  .quote { color: var(--muted); font-style: italic; font-size: 13px; margin-top: 24px; }
+  details { margin-bottom: 10px; }
+  summary { cursor: pointer; padding: 12px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-weight: 600; }
+  details[open] summary { border-radius: 10px 10px 0 0; }
+  details .inner { border: 1px solid var(--line); border-top: none; border-radius: 0 0 10px 10px; background: var(--card); padding: 16px; }
+  .meta { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>巴菲特定投月报</h1>
+<p class="sub">{{ month }} · 生成于 {{ generated_at }} · 汇率 1 USD = {{ plan.fx_sgd_per_usd }} SGD ·
+本月预算 {{ "%.0f"|format(plan.budget_sgd) }} SGD ≈ {{ "%.0f"|format(plan.budget_usd) }} USD</p>
+
+<!-- ============ 本月买入建议 ============ -->
+<h2>一、本月买入建议</h2>
+{% if plan.hold_cash %}
+  <div class="hold-cash">
+    <b>本月建议：持币观望</b><br>{{ plan.hold_cash_reason }}
+  </div>
+{% else %}
+  <div class="card">
+    {% for s in plan.suggestions %}
+    <p class="buy-line">
+      <b>{{ s.symbol }}</b>（{{ s.name }}）现价 ${{ "%.2f"|format(s.price) }} ·
+      综合分 {{ s.total_score }} · 安全边际 {{ s.margin_of_safety }}%<br>
+      <span class="meta">整股方案：买 <b>{{ s.whole_shares }}</b> 股 ≈ ${{ "%.2f"|format(s.whole_shares_usd) }}
+      ｜碎股方案：买入 ${{ "%.2f"|format(s.fractional_usd) }}
+      （≈ {{ "%.0f"|format(s.alloc_sgd) }} SGD）</span>
+    </p>
+    {% endfor %}
+  </div>
+{% endif %}
+{% if plan.skipped %}
+  <p class="meta">因持仓集中度跳过：
+  {% for k in plan.skipped %}{{ k.symbol }}（{{ k.reason }}）{% if not loop.last %}、{% endif %}{% endfor %}</p>
+{% endif %}
+
+<!-- ============ 候选股排行榜 ============ -->
+<h2>二、候选股排行榜（前 {{ ranking|length }} 名）</h2>
+<div class="card tablewrap">
+<table>
+  <tr><th>#</th><th>代码</th><th>公司</th><th>行业</th>
+      <th class="num">综合分</th><th class="num">质量分</th>
+      <th class="num">现价</th><th class="num">内在价值</th><th class="num">安全边际</th><th>可买入</th></tr>
+  {% for s in ranking %}
+  <tr>
+    <td>{{ loop.index }}</td>
+    <td><b>{{ s.symbol }}</b></td>
+    <td>{{ s.name }}</td>
+    <td>{{ s.sector }}</td>
+    <td class="num"><b>{{ s.total_score }}</b></td>
+    <td class="num">{{ s.quality_score }}</td>
+    <td class="num">{% if s.price %}${{ "%.2f"|format(s.price) }}{% else %}—{% endif %}</td>
+    <td class="num">{% if s.intrinsic_value %}${{ "%.2f"|format(s.intrinsic_value) }}{% else %}—{% endif %}</td>
+    <td class="num {% if s.margin_of_safety and s.margin_of_safety > 0 %}pos{% else %}neg{% endif %}">
+      {% if s.margin_of_safety is not none %}{{ s.margin_of_safety }}%{% else %}—{% endif %}</td>
+    <td>{% if s.buyable %}<span class="pill pass">可买入</span>{% elif s.quality_passed %}<span class="pill fail">太贵</span>{% else %}<span class="pill fail">质量未达标</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+<!-- ============ 个股明细 ============ -->
+<h2>三、个股明细（每项巴菲特标准）</h2>
+{% for s in ranking %}
+<details {% if loop.index <= 3 %}open{% endif %}>
+  <summary>{{ s.symbol }} · {{ s.name }} —— 综合分 {{ s.total_score }}
+    {% if s.buyable %}<span class="pill pass">可买入</span>{% endif %}</summary>
+  <div class="inner tablewrap">
+    <table>
+      <tr><th>指标</th><th>巴菲特原则</th><th>实际值</th><th>通过标准</th><th>结果</th></tr>
+      {% for c in s.checks %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="meta">{{ c.principle }}</td>
+        <td>{{ c.value }}</td>
+        <td class="meta">{{ c.threshold }}</td>
+        <td>{% if c.passed %}<span class="pill pass">通过</span>{% else %}<span class="pill fail">未通过</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="meta" style="margin-top:10px">
+      估值：内在价值 {% if s.intrinsic_value %}${{ "%.2f"|format(s.intrinsic_value) }}{% else %}—{% endif %}
+      ｜采用增长率 {% if s.valuation.growth_used is not none %}{{ "%.1f"|format(s.valuation.growth_used * 100) }}%{% else %}—{% endif %}
+      {% if s.valuation.earnings_yield %}｜盈利收益率 {{ "%.1f"|format(s.valuation.earnings_yield) }}%
+        {% if s.valuation.beats_treasury is not none %}（{% if s.valuation.beats_treasury %}高于{% else %}低于{% endif %}10 年期美债）{% endif %}
+      {% endif %}
+      {% if s.valuation.note %}｜{{ s.valuation.note }}{% endif %}
+    </p>
+  </div>
+</details>
+{% endfor %}
+
+<!-- ============ 持仓快照 ============ -->
+<h2>四、持仓快照</h2>
+{% if holdings %}
+<div class="card tablewrap">
+<table>
+  <tr><th>代码</th><th class="num">股数</th><th class="num">成本均价</th>
+      <th class="num">总成本 (USD)</th><th class="num">总成本 (SGD)</th>
+      <th class="num">市值 (USD)</th><th class="num">盈亏</th><th class="num">占比</th></tr>
+  {% for h in holdings %}
+  <tr>
+    <td><b>{{ h.symbol }}</b></td>
+    <td class="num">{{ "%.4g"|format(h.shares) }}</td>
+    <td class="num">${{ "%.2f"|format(h.avg_price_usd) }}</td>
+    <td class="num">${{ "%.2f"|format(h.cost_usd) }}</td>
+    <td class="num">S${{ "%.2f"|format(h.cost_sgd) }}</td>
+    <td class="num">{% if h.market_value_usd %}${{ "%.2f"|format(h.market_value_usd) }}{% else %}—{% endif %}</td>
+    <td class="num {% if h.unrealized_pnl_usd and h.unrealized_pnl_usd >= 0 %}pos{% else %}neg{% endif %}">
+      {% if h.unrealized_pnl_pct is not none %}{{ "%+.1f"|format(h.unrealized_pnl_pct) }}%{% else %}—{% endif %}</td>
+    <td class="num">{% if h.weight_pct %}{{ "%.1f"|format(h.weight_pct) }}%{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% else %}
+<p class="meta">暂无持仓记录。用 <code>python main.py buy 代码 股数 --price 价格 --fx 汇率</code> 录入买入。</p>
+{% endif %}
+
+<p class="quote">"用合理的价格买入优秀的公司，远胜过用便宜的价格买入平庸的公司。" —— 沃伦·巴菲特</p>
+<p class="meta">免责声明：本报告由规则化筛选系统生成，仅供参考，不构成投资建议。</p>
+
+</body>
+</html>
