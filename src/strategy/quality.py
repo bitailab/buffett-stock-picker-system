@@ -210,17 +210,28 @@ def evaluate_quality(income: list[dict], balance: list[dict],
     ))
 
     # ---------- FCF 转化率 ----------
-    ratios = []
-    for c in cfs:
-        r = _safe_div(c.get("freeCashFlow"), c.get("netIncome"))
-        if r is not None and c.get("netIncome", 0) > 0:
-            ratios.append(r * 100)
-    fcf_conv = sum(ratios) / len(ratios) if ratios else None
+    # 用「累计 FCF ÷ 累计净利润」，不要逐年比值再平均：
+    #   (1) 分母可以趋近于零。Gartner 2017 年收购 CEB，净利润仅约 330 万，
+    #       当年比值 4384%，把十年均值拉到 599%——这个数字不描述任何东西。
+    #   (2) 旧写法用 netIncome > 0 剔除亏损年份，等于替波动的公司掩盖事实：
+    #       波音十年累计净亏损，却因为只统计盈利年份而拿到 85% 的转化率并通过。
+    # 累计口径按利润规模加权，单年趋零无法左右它，亏损年份也如实计入。
+    pairs = [(c.get("netIncome"), c.get("freeCashFlow")) for c in cfs]
+    pairs = [(ni, fcf) for ni, fcf in pairs if ni is not None and fcf is not None]
+    sum_ni = sum(ni for ni, _ in pairs)
+    sum_fcf = sum(fcf for _, fcf in pairs)
+    if not pairs:
+        fcf_conv, fcf_note = None, "数据缺失"
+    elif sum_ni <= 0:
+        fcf_conv, fcf_note = None, f"{len(pairs)} 年累计净利润为负"
+    else:
+        fcf_conv = sum_fcf / sum_ni * 100
+        fcf_note = f"{len(pairs)} 年累计 {fcf_conv:.0f}%"
     res.checks.append(Check(
         name="FCF/净利润",
         principle="利润必须是真金白银的现金流",
-        value=f"平均 {fcf_conv:.0f}%" if fcf_conv is not None else "数据缺失",
-        threshold=f"≥ {cfg['fcf_conversion_min']}%",
+        value=fcf_note,
+        threshold=f"累计 ≥ {cfg['fcf_conversion_min']}%",
         passed=fcf_conv is not None and fcf_conv >= cfg["fcf_conversion_min"],
         weight=1.5,
     ))
