@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>巴菲特选股系统</title>
+<style>
+  :root {
+    --surface: #fcfcfb; --card: #ffffff; --ink: #0b0b0b; --ink-2: #52514e;
+    --ink-3: #8a8983; --line: #e6e4de; --accent: #2a78d6;
+    --good: #008300; --good-bg: #e7f3e7; --bad: #b03a2e; --bad-bg: #f9ece9;
+    --warn: #8a6d1a; --warn-bg: #f7f0dd;
+    --s1:#2a78d6; --s2:#1baf7a; --s3:#eda100; --s4:#008300; --s5:#4a3aa7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #1a1a19; --card: #232322; --ink: #ffffff; --ink-2: #c3c2b7;
+      --ink-3: #8a8983; --line: #3a3936; --accent: #3987e5;
+      --good: #4caf50; --good-bg: #1e2f1e; --bad: #e66767; --bad-bg: #331f1d;
+      --warn: #d4b04a; --warn-bg: #2f2a18;
+      --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s4:#008300; --s5:#9085e9;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--surface); color: var(--ink); line-height: 1.55;
+    font-family: "PingFang SC","Microsoft YaHei",-apple-system,"Segoe UI",sans-serif;
+    max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 22px; } h2 { font-size: 16px; margin: 22px 0 10px; }
+  .sub { color: var(--ink-2); font-size: 13px; margin: 4px 0 18px; }
+  nav { display: flex; gap: 6px; border-bottom: 2px solid var(--line); margin-bottom: 20px; flex-wrap: wrap; }
+  nav button { background: none; border: none; padding: 10px 16px; font-size: 15px;
+    color: var(--ink-2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  nav button.on { color: var(--ink); font-weight: 700; border-bottom-color: var(--accent); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 12px; margin-bottom: 20px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .tile .k { font-size: 12px; color: var(--ink-2); }
+  .tile .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile .v small { font-size: 13px; font-weight: 400; color: var(--ink-3); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; color: var(--ink-2); font-weight: 600; padding: 7px 9px;
+    border-bottom: 2px solid var(--line); white-space: nowrap; }
+  td { padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th.num { text-align: right; }
+  .pill { display: inline-block; padding: 0 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+  .p-good { color: var(--good); background: var(--good-bg); }
+  .p-bad { color: var(--bad); background: var(--bad-bg); }
+  .p-warn { color: var(--warn); background: var(--warn-bg); }
+  .pos { color: var(--good); } .neg { color: var(--bad); }
+  .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 14px; }
+  label { font-size: 12.5px; color: var(--ink-2); display: block; margin-bottom: 3px; }
+  input, select { background: var(--card); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; width: 130px; }
+  button.act { background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button.act:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: none; border: 1px solid var(--line); color: var(--ink-2);
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  .notice { border-radius: 10px; padding: 14px 18px; font-size: 14px; margin-bottom: 14px; }
+  .n-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--line); }
+  .hero { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .hero small { font-size: 14px; font-weight: 400; color: var(--ink-2); }
+  .wbar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; gap: 2px;
+    background: var(--surface); margin: 10px 0 6px; }
+  .wbar div { min-width: 2px; }
+  .wlegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; }
+  .wlegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+  .meta { color: var(--ink-3); font-size: 12.5px; }
+  .detail td { background: var(--surface); }
+  tr.clickable { cursor: pointer; }
+  .checks { font-size: 12.5px; padding: 6px 4px; }
+  .checks div { padding: 2px 0; }
+  #msg { position: fixed; bottom: 20px; right: 20px; background: var(--ink); color: var(--surface);
+    padding: 10px 18px; border-radius: 8px; font-size: 14px; display: none; z-index: 9; }
+</style>
+</head>
+<body data-palette="#2a78d6,#1baf7a,#eda100,#008300,#4a3aa7">
+
+<h1>巴菲特选股系统</h1>
+<p class="sub" id="subline">加载中…</p>
+
+<nav>
+  <button class="on" data-tab="dash">仪表盘</button>
+  <button data-tab="dca">每月定投</button>
+  <button data-tab="lump">一次性建仓</button>
+  <button data-tab="port">持仓</button>
+</nav>
+
+<!-- ================= 仪表盘 ================= -->
+<section id="tab-dash">
+  <div class="tiles" id="tiles"></div>
+  <div class="row">
+    <button class="act" id="rescan">重新扫描 S&P 500</button>
+    <span class="meta" id="scanstat"></span>
+  </div>
+  <h2>排行榜（点击行看各项巴菲特标准明细）</h2>
+  <div class="card tablewrap"><table id="ranktable">
+    <thead><tr><th>#</th><th>代码</th><th>公司</th><th class="num">综合分</th>
+    <th class="num">现价</th><th class="num">内在价值</th><th class="num">安全边际</th><th>状态</th></tr></thead>
+    <tbody></tbody></table></div>
+</section>
+
+<!-- ================= 定投 ================= -->
+<section id="tab-dca" hidden>
+  <div class="row">
+    <div><label>每月预算（SGD）</label><input id="dca-budget" type="number" value="5000" min="100"></div>
+    <button class="act" onclick="loadDca()">计算本月分配</button>
+  </div>
+  <div id="dca-out"></div>
+</section>
+
+<!-- ================= 建仓 ================= -->
+<section id="tab-lump" hidden>
+  <div class="row">
+    <div><label>建仓金额（USD）</label><input id="ls-amount" type="number" value="10000" min="500"></div>
+    <div><label>投资期限</label><select id="ls-years">
+      <option value="0.5">6 个月</option><option value="1" selected>1 年</option>
+      <option value="2">2 年</option><option value="3">3 年</option><option value="5">5 年</option>
+    </select></div>
+    <button class="act" onclick="loadLump()">构建组合</button>
+  </div>
+  <div id="ls-out"></div>
+</section>
+
+<!-- ================= 持仓 ================= -->
+<section id="tab-port" hidden>
+  <h2>录入买入</h2>
+  <div class="card"><div class="row" style="margin-bottom:0">
+    <div><label>代码</label><input id="b-sym" placeholder="FDS" style="width:90px"></div>
+    <div><label>股数</label><input id="b-sh" type="number" step="any" style="width:90px"></div>
+    <div><label>成交价 USD</label><input id="b-px" type="number" step="any" style="width:110px"></div>
+    <div><label>汇率 1USD=?SGD（可空）</label><input id="b-fx" type="number" step="any" style="width:150px"></div>
+    <div><label>备注</label><input id="b-note" style="width:150px"></div>
+    <button class="act" onclick="doBuy()">记录</button>
+  </div></div>
+  <h2>当前持仓</h2>
+  <div class="card tablewrap"><table id="holdtable">
+    <thead><tr><th>代码</th><th class="num">股数</th><th class="num">成本均价</th><th class="num">成本USD</th>
+    <th class="num">成本SGD</th><th class="num">市值USD</th><th class="num">盈亏</th><th class="num">占比</th></tr></thead>
+    <tbody></tbody></table></div>
+  <h2>交易流水</h2>
+  <div class="card tablewrap"><table id="tradetable">
+    <thead><tr><th>#</th><th>时间</th><th>代码</th><th class="num">股数</th><th class="num">价格</th>
+    <th class="num">汇率</th><th>备注</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<div id="msg"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmt = (n, d=2) => n == null ? "—" : Number(n).toLocaleString("en-US",{minimumFractionDigits:d, maximumFractionDigits:d});
+const pct = (n, d=1) => n == null ? "—" : (n>=0?"+":"") + Number(n).toFixed(d) + "%";
+const SERIES = ["var(--s1)","var(--s2)","var(--s3)","var(--s4)","var(--s5)"];
+function toast(t){ const m=$("#msg"); m.textContent=t; m.style.display="block"; setTimeout(()=>m.style.display="none",3000); }
+async function api(path, opts){ const r = await fetch(path, opts); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+
+/* ---------- 标签页 ---------- */
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x===b));
+  document.querySelectorAll("section").forEach(s => s.hidden = s.id !== "tab-"+b.dataset.tab);
+  if (b.dataset.tab === "port") loadPort();
+});
+
+/* ---------- 仪表盘 ---------- */
+async function loadDash(){
+  const s = await api("/api/summary");
+  $("#subline").textContent = `S&P 500 · 已扫描 ${s.scanned}/${s.universe} · ` +
+    (s.last_scan ? `最近扫描 ${s.last_scan.slice(0,16).replace("T"," ")}` : "尚未扫描") +
+    (s.fx_sgd_per_usd ? ` · 汇率 1 USD = ${s.fx_sgd_per_usd} SGD` : "");
+  $("#dca-budget").value = s.monthly_budget_sgd;
+  $("#tiles").innerHTML = [
+    ["已扫描", `${s.scanned}<small>/${s.universe}</small>`],
+    ["质量达标", s.quality_passed],
+    ["可买入（含安全边际）", s.buyable],
+    ["汇率 1 USD", s.fx_sgd_per_usd ? `${s.fx_sgd_per_usd}<small> SGD</small>` : "—"],
+  ].map(([k,v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+
+  const rows = await api("/api/ranking?limit=60");
+  $("#ranktable tbody").innerHTML = rows.map((r,i) => {
+    const st = r.buyable ? '<span class="pill p-good">可买入</span>'
+      : r.quality_passed ? '<span class="pill p-warn">太贵</span>'
+      : '<span class="pill p-bad">质量未达标</span>';
+    const checks = (r.checks||[]).map(c =>
+      `<div>${c.passed?"✓":"✗"} <b>${c.name}</b>：${c.value} <span class="meta">（标准 ${c.threshold}）</span></div>`).join("");
+    return `<tr class="clickable" onclick="this.nextElementSibling.hidden=!this.nextElementSibling.hidden">
+      <td>${i+1}</td><td><b>${r.symbol}</b></td><td>${r.name??""}</td>
+      <td class="num"><b>${r.total_score}</b></td>
+      <td class="num">${r.price?"$"+fmt(r.price):"—"}</td>
+      <td class="num">${r.intrinsic_value?"$"+fmt(r.intrinsic_value):"—"}</td>
+      <td class="num ${r.margin_of_safety>0?"pos":"neg"}">${r.margin_of_safety==null?"—":pct(r.margin_of_safety)}</td>
+      <td>${st}</td></tr>
+      <tr class="detail" hidden><td colspan="8"><div class="checks">${checks}</div></td></tr>`;
+  }).join("");
+}
+
+$("#rescan").onclick = async () => {
+  const r = await api("/api/scan", {method:"POST"});
+  toast(r.ok ? "扫描已启动（后台进行，约 20-40 分钟）" : r.error);
+  pollScan();
+};
+async function pollScan(){
+  const st = await api("/api/scan/status");
+  $("#scanstat").textContent = st.running ? `扫描中… ${st.scanned}/${st.universe}` : "";
+  if (st.running) setTimeout(pollScan, 5000); else loadDash();
+}
+
+/* ---------- 定投 ---------- */
+async function loadDca(){
+  const p = await api("/api/dca?budget_sgd=" + $("#dca-budget").value);
+  if (p.hold_cash) {
+    $("#dca-out").innerHTML = `<div class="notice n-warn"><b>本月建议：持币观望</b><br>${p.hold_cash_reason}</div>`;
+    return;
+  }
+  $("#dca-out").innerHTML = `
+    <p class="meta">预算 ${fmt(p.budget_sgd,0)} SGD ≈ ${fmt(p.budget_usd,0)} USD · 汇率 1 USD = ${p.fx_sgd_per_usd} SGD</p>
+    <div class="card tablewrap"><table>
+    <thead><tr><th>代码</th><th>公司</th><th class="num">现价</th><th class="num">综合分</th><th class="num">安全边际</th>
+    <th class="num">整股方案</th><th class="num">碎股方案</th><th class="num">≈SGD</th></tr></thead><tbody>
+    ${p.suggestions.map(s => `<tr><td><b>${s.symbol}</b></td><td>${s.name}</td>
+      <td class="num">$${fmt(s.price)}</td><td class="num">${s.total_score}</td>
+      <td class="num pos">${pct(s.margin_of_safety)}</td>
+      <td class="num">${s.whole_shares} 股（$${fmt(s.whole_shares_usd)}）</td>
+      <td class="num">$${fmt(s.fractional_usd)}</td><td class="num">S$${fmt(s.alloc_sgd,0)}</td></tr>`).join("")}
+    </tbody></table></div>
+    ${p.skipped.length ? `<p class="meta">因集中度跳过：${p.skipped.map(k=>k.symbol+"（"+k.reason+"）").join("、")}</p>` : ""}`;
+}
+
+/* ---------- 建仓 ---------- */
+async function loadLump(){
+  const p = await api(`/api/lumpsum?amount_usd=${$("#ls-amount").value}&years=${$("#ls-years").value}`);
+  if (!p.positions.length) {
+    $("#ls-out").innerHTML = `<div class="notice n-warn"><b>建议持币等待</b><br>${p.cash_reason}</div>`;
+    return;
+  }
+  const bar = p.positions.map((x,i) =>
+    `<div style="flex:${x.weight};background:${SERIES[i%5]}" title="${x.symbol} ${(x.weight*100).toFixed(0)}%"></div>`).join("")
+    + (p.cash_usd ? `<div style="flex:${p.cash_usd/p.amount_usd};background:var(--line)" title="现金"></div>` : "");
+  const legend = p.positions.map((x,i) =>
+    `<span><i style="background:${SERIES[i%5]}"></i>${x.symbol} ${(x.weight*100).toFixed(0)}%</span>`).join("")
+    + (p.cash_usd ? `<span><i style="background:var(--line)"></i>现金 ${(p.cash_usd/p.amount_usd*100).toFixed(0)}%</span>` : "");
+  $("#ls-out").innerHTML = `
+    <div class="tiles">
+      <div class="tile"><div class="k">模型预期年化收益</div><div class="v">${pct(p.exp_annual_return*100)}</div></div>
+      <div class="tile"><div class="k">${p.years} 年后预期价值</div><div class="v">$${fmt(p.exp_value_at_horizon,0)}</div></div>
+      <div class="tile"><div class="k">持仓数</div><div class="v">${p.positions.length}<small>${p.cash_usd?" + 现金":""}</small></div></div>
+    </div>
+    <div class="wbar">${bar}</div><div class="wlegend">${legend}</div>
+    <div class="card tablewrap"><table>
+    <thead><tr><th>代码</th><th>公司</th><th class="num">权重</th><th class="num">金额</th><th class="num">整股</th>
+    <th class="num">现价→内在价值</th><th class="num">预期年化</th><th class="num">期内累计</th></tr></thead><tbody>
+    ${p.positions.map(x => `<tr><td><b>${x.symbol}</b></td><td>${x.name}</td>
+      <td class="num">${(x.weight*100).toFixed(0)}%</td>
+      <td class="num">$${fmt(x.alloc_usd,0)}</td>
+      <td class="num">${x.whole_shares} 股（$${fmt(x.whole_shares_usd,0)}）</td>
+      <td class="num">$${fmt(x.price)} → $${fmt(x.intrinsic)}</td>
+      <td class="num pos">${pct(x.exp_annual_return*100)}</td>
+      <td class="num pos">${pct(x.exp_total_return*100)}</td></tr>`).join("")}
+    </tbody></table></div>
+    ${p.cash_usd ? `<p class="meta">现金 $${fmt(p.cash_usd,0)}：${p.cash_reason}</p>` : ""}
+    <p class="meta">模型假设：价格在约 3 年内向内在价值回归 70%，内在价值按各自股东盈余增速成长，不含股息。
+    这是基于估值的<b>模型估计</b>，不是收益承诺——期限越短，估值修复是否兑现的不确定性越大。</p>`;
+}
+
+/* ---------- 持仓 ---------- */
+async function loadPort(){
+  const d = await api("/api/holdings");
+  $("#holdtable tbody").innerHTML = d.holdings.length ? d.holdings.map(h => `<tr>
+    <td><b>${h.symbol}</b></td><td class="num">${h.shares}</td>
+    <td class="num">$${fmt(h.avg_price_usd)}</td><td class="num">$${fmt(h.cost_usd)}</td>
+    <td class="num">S$${fmt(h.cost_sgd)}</td>
+    <td class="num">${h.market_value_usd?"$"+fmt(h.market_value_usd):"—"}</td>
+    <td class="num ${h.unrealized_pnl_usd>=0?"pos":"neg"}">${h.unrealized_pnl_pct==null?"—":pct(h.unrealized_pnl_pct)}</td>
+    <td class="num">${h.weight_pct?h.weight_pct.toFixed(1)+"%":"—"}</td></tr>`).join("")
+    : `<tr><td colspan="8" class="meta">暂无持仓</td></tr>`;
+  $("#tradetable tbody").innerHTML = d.trades.length ? d.trades.map(t => `<tr>
+    <td>${t.id}</td><td>${t.traded_at.slice(0,16).replace("T"," ")}</td><td><b>${t.symbol}</b></td>
+    <td class="num">${t.shares}</td><td class="num">$${fmt(t.price_usd)}</td>
+    <td class="num">${t.fx_sgd_per_usd.toFixed(4)}</td><td>${t.note||""}</td></tr>`).join("")
+    : `<tr><td colspan="7" class="meta">暂无交易</td></tr>`;
+}
+async function doBuy(){
+  const body = { symbol: $("#b-sym").value.trim(), shares: $("#b-sh").value,
+    price: $("#b-px").value, fx: $("#b-fx").value || null, note: $("#b-note").value };
+  if (!body.symbol || !body.shares || !body.price) { toast("请填写代码、股数、成交价"); return; }
+  const r = await api("/api/buy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  toast(`已记录 #${r.trade_id}（汇率 ${r.fx}）`);
+  ["b-sym","b-sh","b-px","b-fx","b-note"].forEach(id => $("#"+id).value = "");
+  loadPort();
+}
+
+loadDash(); pollScan();
+</script>
+</body>
+</html>
