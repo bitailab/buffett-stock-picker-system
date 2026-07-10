@@ -41,10 +41,16 @@ def load_config() -> dict:
 def get_context(cfg):
     db_path = str(PROJECT_ROOT / cfg["paths"]["db"])
     cache = Cache(db_path)
-    if cfg.get("data_source", "yfinance") == "fmp":
+    source = cfg.get("data_source", "yfinance")
+    if source == "fmp":
         client = FMPClient(cfg["fmp"]["api_key"], cache,
                            plan=cfg["fmp"].get("plan", "free"),
                            daily_call_budget=cfg["fmp"].get("daily_call_budget", 240))
+    elif source == "edgar":
+        from src.data.edgar_client import EDGARClient
+        edgar_cfg = cfg.get("edgar") or {}
+        client = EDGARClient(cache, user_agent=edgar_cfg.get("user_agent", ""),
+                             years=edgar_cfg.get("years", 10))
     else:
         from src.data.yf_client import YFClient
         client = YFClient(cache)

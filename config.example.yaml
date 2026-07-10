@@ -4,7 +4,12 @@
 
 # 数据源：yfinance（免费、覆盖全部美股、无每日配额，推荐）
 #        fmp（免费档只开放少数股票且限 250 次/天；升级付费档后可切换回来）
-data_source: yfinance
+data_source: edgar
+
+edgar:
+  # SEC 要求 User-Agent 含可联系的邮箱，否则封 IP。请求上限 10 次/秒。
+  user_agent: "market-scan personal research your-email@example.com"
+  years: 10                 # 取最近几个财年（EDGAR 通常有 11-16 年）
 
 fmp:
   # 到 https://site.financialmodelingprep.com 注册后填入你的 API key
