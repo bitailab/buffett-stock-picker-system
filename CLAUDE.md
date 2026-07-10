@@ -48,10 +48,16 @@ config.yaml                  # 全部阈值 + FMP key（不进git）；config.ex
   （SSH 别名 dig = root@dig.local = 192.168.88.15），systemd 服务 `buffett-webapp`
   （开机自启+自动重启），Web 端口 8600，venv 在项目下 `venv/`。
 - **持仓账本以 dig 上的 data/market_scan.db 为准**，本地克隆只是开发副本。
-- 更新部署（必须排除 data/，别覆盖用户持仓）：
+- 更新部署走 git，不要用 rsync（rsync 会覆盖 dig 上的 config.yaml）：
   ```bash
-  rsync -az --exclude __pycache__ --exclude .git --exclude data --exclude venv \
-      ./ dig:/opt/buffett-stock-picker-system/ && ssh dig systemctl restart buffett-webapp
+  git push origin main
+  ssh dig 'cd /opt/buffett-stock-picker-system && git pull && systemctl restart buffett-webapp'
+  ```
+- **`config.yaml` 不进 git**，改了阈值/新增配置项必须手动同步到 dig 上那一份，
+  否则代码里的 `cfg.get(...)` 会静默回退到旧默认值。
+- 改动策略逻辑后，dig 上要单独跑一次重算（走缓存，不烧配额）：
+  ```bash
+  ssh dig 'cd /opt/buffett-stock-picker-system && venv/bin/python main.py scan --force'
   ```
 - 页面无认证，仅限内网；若要公网访问需加认证/反代。
 

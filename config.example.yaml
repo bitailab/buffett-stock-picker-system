@@ -31,9 +31,18 @@ quality:
   roe_floor: 10             # 任何一年 ROE 不得低于 10%
   gross_margin_min: 40      # 毛利率 ≥ 40%（护城河代理）
   net_margin_min: 10        # 净利率 ≥ 10%
-  eps_cagr_min: 5           # EPS 年复合增长 ≥ 5%
-  max_debt_to_ebitda: 3     # 总债务/EBITDA < 3
-  max_debt_to_equity: 0.8   # 或 D/E < 0.8（两者满足其一即可）
+  # 增长率用「营业利润」而非 EPS：EPS 含处置收益/税务返还/汇兑等非经营损益，
+  # 单个一次性年份做端点会让 CAGR 凭空翻正或翻负。端点再取两年平均降噪。
+  earnings_cagr_min: 5      # 营业利润年复合增长 ≥ 5%
+  # 负债判定规则：
+  #   fcf_only  = 只看 债务/FCF（默认）。FCF 已扣资本开支，是芒格认可的"真钱"口径；
+  #               D/E 对高回购、资本轻的复利机器天然失真（穆迪、高露洁 D/E 极高但几乎无风险）。
+  #   or_ebitda = 旧规则：债务/EBITDA < 3 或 D/E < 0.8，任一满足即通过。
+  #   and_fcf   = D/E 与 债务/FCF 都要过（会误杀穆迪一类，不建议）。
+  debt_rule: fcf_only
+  max_debt_to_fcf: 5        # 总债务 / 最近三年平均自由现金流 < 5
+  max_debt_to_ebitda: 3     # 仅 or_ebitda 规则使用
+  max_debt_to_equity: 0.8   # 仅 or_ebitda / and_fcf 规则使用
   min_interest_coverage: 5  # EBIT/利息支出 > 5
   fcf_conversion_min: 80    # FCF/净利润 平均 ≥ 80%
 

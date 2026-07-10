@@ -31,6 +31,21 @@ def _cagr(first: float, last: float, years: int) -> float | None:
     return ((last / first) ** (1 / years) - 1) * 100
 
 
+def _smoothed_cagr(series: list[float]) -> float | None:
+    """端点取两年平均后再算 CAGR，避免一次性损益把首尾任一年污染。
+
+    序列按时间正序。首尾各取 2 个点求均值，其"重心"分别落在 t=0.5 和 t=n-1.5，
+    因此跨度为 n-2 年。数据不足 4 年时退回裸端点。
+    """
+    n = len(series)
+    if n < 2:
+        return None
+    k = 2 if n >= 4 else 1
+    base = sum(series[:k]) / k
+    end = sum(series[-k:]) / k
+    return _cagr(base, end, n - k)
+
+
 def _safe_div(a, b):
     if a is None or b in (None, 0):
         return None
@@ -96,19 +111,29 @@ def evaluate_quality(income: list[dict], balance: list[dict],
         weight=1.0,
     ))
 
-    # ---------- EPS 记录 ----------
+    # ---------- 盈利记录 ----------
+    # 「无亏损」看 EPS（股东视角）；「增长率」看营业利润。
+    # EPS 会被处置收益、税务返还、汇兑等非经营损益污染：JNJ 分拆 Kenvue 那年
+    # 净利润 351 亿远超营业利润 220 亿，ABT 与 Gartner 也各有一个净利润 > 营业利润
+    # 的年份。用这类年份做端点，CAGR 会凭空翻正或翻负。营业利润不含这些项目。
     eps_series = [i.get("epsDiluted") or i.get("epsdiluted") or i.get("eps") for i in inc]
     eps_series = [e for e in eps_series if e is not None]
     no_loss = bool(eps_series) and all(e > 0 for e in eps_series)
-    eps_cagr = _cagr(eps_series[0], eps_series[-1], len(eps_series) - 1) if len(eps_series) >= 2 else None
+
+    op_series = [i.get("operatingIncome") for i in inc]
+    op_series = [o for o in op_series if o is not None]
+    op_cagr = _smoothed_cagr(op_series) if op_series and all(o > 0 for o in op_series) else None
+
+    min_cagr = cfg.get("earnings_cagr_min", cfg.get("eps_cagr_min", 5))
     res.checks.append(Check(
-        name="EPS 盈利记录",
+        name="盈利记录",
         principle="盈利稳定可预测，看得懂未来十年",
-        value=(f"{len(eps_series)} 年无亏损，CAGR {eps_cagr:.1f}%"
-               if no_loss and eps_cagr is not None
-               else ("有亏损年份" if eps_series else "数据缺失")),
-        threshold=f"无亏损年份且 CAGR ≥ {cfg['eps_cagr_min']}%",
-        passed=no_loss and eps_cagr is not None and eps_cagr >= cfg["eps_cagr_min"],
+        value=(f"{len(eps_series)} 年无亏损，营业利润 CAGR {op_cagr:.1f}%"
+               if no_loss and op_cagr is not None
+               else ("有亏损年份" if eps_series and not no_loss
+                     else ("营业利润为负或缺失" if eps_series else "数据缺失"))),
+        threshold=f"无亏损年份且 营业利润 CAGR ≥ {min_cagr}%",
+        passed=no_loss and op_cagr is not None and op_cagr >= min_cagr,
         weight=1.5,
     ))
 
@@ -119,14 +144,49 @@ def evaluate_quality(income: list[dict], balance: list[dict],
     ebitda = latest_inc.get("ebitda")
     d2e = _safe_div(total_debt, equity)
     d2ebitda = _safe_div(total_debt, ebitda)
-    debt_ok = ((d2ebitda is not None and d2ebitda < cfg["max_debt_to_ebitda"])
-               or (d2e is not None and 0 <= d2e < cfg["max_debt_to_equity"]))
+    # 债务/自由现金流：分母取最近三年平均 FCF，抹平单年波动。
+    # FCF 已扣除资本开支，是芒格反对 EBITDA 时所指的"真钱"口径。
+    fcfs = [c.get("freeCashFlow") for c in cfs[-3:]]
+    fcfs = [f for f in fcfs if f is not None]
+    avg_fcf = (sum(fcfs) / len(fcfs)) if fcfs else None
+    d2fcf = _safe_div(total_debt, avg_fcf) if (avg_fcf or 0) > 0 else None
+
+    rule = cfg.get("debt_rule", "or_ebitda")
+    ok_d2e = d2e is not None and 0 <= d2e < cfg["max_debt_to_equity"]
+    ok_ebitda = d2ebitda is not None and d2ebitda < cfg["max_debt_to_ebitda"]
+    ok_fcf = d2fcf is not None and d2fcf < cfg.get("max_debt_to_fcf", 5)
+    debt_free = total_debt is not None and total_debt <= 0
+
+    if debt_free:
+        debt_ok = True
+    elif rule == "and_fcf":
+        # 两项都要过；某项算不出（如保险股无 EBITDA、亏损公司无正 FCF）则只看可得的那项
+        available = [v for v, avail in ((ok_d2e, d2e is not None), (ok_fcf, d2fcf is not None)) if avail]
+        debt_ok = all(available) if available else False
+    elif rule == "fcf_only":
+        debt_ok = ok_fcf if d2fcf is not None else ok_d2e
+    else:  # or_ebitda：原行为
+        debt_ok = ok_ebitda or ok_d2e
+
+    parts = []
+    if d2e is not None:
+        parts.append(f"D/E {d2e:.2f}")
+    if d2ebitda is not None:
+        parts.append(f"债务/EBITDA {d2ebitda:.2f}")
+    if d2fcf is not None:
+        parts.append(f"债务/FCF {d2fcf:.2f}")
+    thresholds = {
+        "and_fcf": f"D/E < {cfg['max_debt_to_equity']} 且 债务/FCF < {cfg.get('max_debt_to_fcf', 5)}",
+        "fcf_only": f"债务/FCF < {cfg.get('max_debt_to_fcf', 5)}",
+    }
     res.checks.append(Check(
         name="负债水平",
         principle="不靠杠杆赚钱，风浪来了不翻船",
-        value=(f"债务/EBITDA {d2ebitda:.2f}，D/E {d2e:.2f}"
-               if d2ebitda is not None and d2e is not None else "数据缺失"),
-        threshold=f"债务/EBITDA < {cfg['max_debt_to_ebitda']} 或 D/E < {cfg['max_debt_to_equity']}",
+        value="无有息负债" if debt_free else (
+            "，".join(parts) if parts else "数据缺失"),
+        threshold=thresholds.get(
+            rule,
+            f"债务/EBITDA < {cfg['max_debt_to_ebitda']} 或 D/E < {cfg['max_debt_to_equity']}"),
         passed=debt_ok,
         weight=1.5,
     ))
