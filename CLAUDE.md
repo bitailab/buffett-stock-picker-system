@@ -74,5 +74,6 @@ config.yaml                  # 全部阈值 + FMP key（不进git）；config.ex
 
 ## 远端仓库
 
-git@github.com:bitailab/-buffett-stock-picker-system.git
-（仓库名开头的连字符是创建时误输，用户尚未改名；SSH 推送权限，无 gh CLI/API token。）
+git@github.com:bitailab/buffett-stock-picker-system.git
+（2026-07 已改名去掉开头误输的连字符；旧地址 `-buffett-...` 目前仍能靠 GitHub
+重定向工作，但别再用。SSH 推送权限，无 gh CLI/API token。dig 上也有 deploy key。）
