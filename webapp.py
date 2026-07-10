@@ -64,8 +64,13 @@ def api_summary():
 def api_ranking():
     _, _, conn = _ctx()
     scores = load_scores(conn)
+    # 默认返回全部（约 500 只）：翻页与搜索在前端做，避免反复请求。
+    # 仍支持 ?limit=N 截断（老接口兼容）。
+    limit = request.args.get("limit")
+    if limit is not None:
+        scores = scores[: int(limit)]
     out = []
-    for s in scores[: int(request.args.get("limit", 60))]:
+    for s in scores:
         out.append({k: s.get(k) for k in (
             "symbol", "name", "sector", "price", "total_score", "quality_score",
             "intrinsic_value", "margin_of_safety", "quality_passed", "buyable")}

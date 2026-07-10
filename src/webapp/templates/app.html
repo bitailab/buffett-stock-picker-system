@@ -97,10 +97,24 @@
     <span class="meta" id="scanstat"></span>
   </div>
   <h2>排行榜（点击行看各项巴菲特标准明细）</h2>
+  <div class="row" style="align-items:center;gap:12px;margin-bottom:10px">
+    <input id="rank-search" placeholder="搜索代码或公司名，如 GOOGL / adobe" style="flex:1;min-width:200px">
+    <select id="rank-filter">
+      <option value="all">全部</option>
+      <option value="buyable">仅可买入</option>
+      <option value="quality">仅质量达标</option>
+    </select>
+    <span class="meta" id="rank-count"></span>
+  </div>
   <div class="card tablewrap"><table id="ranktable">
     <thead><tr><th>#</th><th>代码</th><th>公司</th><th class="num">综合分</th>
     <th class="num">现价</th><th class="num">内在价值</th><th class="num">安全边际</th><th>状态</th></tr></thead>
     <tbody></tbody></table></div>
+  <div class="row" style="align-items:center;justify-content:center;gap:12px;margin-top:10px">
+    <button class="act" id="rank-prev">← 上一页</button>
+    <span class="meta" id="rank-page"></span>
+    <button class="act" id="rank-next">下一页 →</button>
+  </div>
 </section>
 
 <!-- ================= 定投 ================= -->
@@ -178,23 +192,61 @@ async function loadDash(){
     ["汇率 1 USD", s.fx_sgd_per_usd ? `${s.fx_sgd_per_usd}<small> SGD</small>` : "—"],
   ].map(([k,v]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
 
-  const rows = await api("/api/ranking?limit=60");
-  $("#ranktable tbody").innerHTML = rows.map((r,i) => {
+  // 拉全量一次，记住每只的真实排名（按综合分降序），翻页/搜索都在前端做
+  rankAll = (await api("/api/ranking")).map((r,i) => ({...r, rank:i+1}));
+  rankPage = 0;
+  renderRank();
+}
+
+/* ---------- 排行榜：搜索 + 筛选 + 分页 ---------- */
+let rankAll = [], rankPage = 0;
+const RANK_PAGE_SIZE = 50;
+
+function rankFiltered(){
+  const q = ($("#rank-search").value || "").trim().toLowerCase();
+  const f = $("#rank-filter").value;
+  return rankAll.filter(r => {
+    if (f === "buyable" && !r.buyable) return false;
+    if (f === "quality" && !r.quality_passed) return false;
+    if (!q) return true;
+    return (r.symbol||"").toLowerCase().includes(q)
+        || (r.name||"").toLowerCase().includes(q);
+  });
+}
+
+function renderRank(){
+  const list = rankFiltered();
+  const pages = Math.max(1, Math.ceil(list.length / RANK_PAGE_SIZE));
+  if (rankPage >= pages) rankPage = pages - 1;
+  if (rankPage < 0) rankPage = 0;
+  const slice = list.slice(rankPage*RANK_PAGE_SIZE, (rankPage+1)*RANK_PAGE_SIZE);
+
+  $("#ranktable tbody").innerHTML = slice.map(r => {
     const st = r.buyable ? '<span class="pill p-good">可买入</span>'
       : r.quality_passed ? '<span class="pill p-warn">太贵</span>'
       : '<span class="pill p-bad">质量未达标</span>';
     const checks = (r.checks||[]).map(c =>
       `<div>${c.passed?"✓":"✗"} <b>${c.name}</b>：${c.value} <span class="meta">（标准 ${c.threshold}）</span></div>`).join("");
     return `<tr class="clickable" onclick="this.nextElementSibling.hidden=!this.nextElementSibling.hidden">
-      <td>${i+1}</td><td><b>${r.symbol}</b></td><td>${r.name??""}</td>
+      <td>${r.rank}</td><td><b>${r.symbol}</b></td><td>${r.name??""}</td>
       <td class="num"><b>${r.total_score}</b></td>
       <td class="num">${r.price?"$"+fmt(r.price):"—"}</td>
       <td class="num">${r.intrinsic_value?"$"+fmt(r.intrinsic_value):"—"}</td>
       <td class="num ${r.margin_of_safety>0?"pos":"neg"}">${r.margin_of_safety==null?"—":pct(r.margin_of_safety)}</td>
       <td>${st}</td></tr>
       <tr class="detail" hidden><td colspan="8"><div class="checks">${checks}</div></td></tr>`;
-  }).join("");
+  }).join("") || `<tr><td colspan="8" class="meta" style="text-align:center;padding:20px">无匹配结果</td></tr>`;
+
+  $("#rank-count").textContent = `共 ${list.length} 只`;
+  $("#rank-page").textContent = `第 ${rankPage+1} / ${pages} 页`;
+  $("#rank-prev").disabled = rankPage <= 0;
+  $("#rank-next").disabled = rankPage >= pages-1;
 }
+
+$("#rank-search").oninput = () => { rankPage = 0; renderRank(); };
+$("#rank-filter").onchange = () => { rankPage = 0; renderRank(); };
+$("#rank-prev").onclick = () => { rankPage--; renderRank(); };
+$("#rank-next").onclick = () => { rankPage++; renderRank(); };
 
 $("#rescan").onclick = async () => {
   const r = await api("/api/scan", {method:"POST"});
